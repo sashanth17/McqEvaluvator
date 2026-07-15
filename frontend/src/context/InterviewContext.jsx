@@ -63,19 +63,23 @@ export function InterviewProvider({ children }) {
     setThreadId(data.thread_id);
     
     const qText = data.generated_question?.question || "Can you explain this topic?";
-    setQuestions([qText]);
+    setQuestions([{ text: qText, audioUrl: data.audio_url }]);
     setCurrentQuestionIndex(0);
   };
 
   // API: submitAnswer
-  const submitAnswer = async (answerText) => {
-    setAnswers((prev) => [...prev, { questionId: currentQuestionIndex, answer: answerText }]);
+  const submitAnswer = async (answerText, timeTakenSeconds = 0) => {
+    setAnswers((prev) => [...prev, { questionId: currentQuestionIndex, answer: answerText, timeTaken: timeTakenSeconds }]);
     
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     const response = await fetch(`${apiUrl}/submit_answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ thread_id: threadId, student_answer: answerText })
+      body: JSON.stringify({ 
+        thread_id: threadId, 
+        student_answer: answerText,
+        time_taken_seconds: timeTakenSeconds
+      })
     });
     
     const data = await response.json();
@@ -85,8 +89,22 @@ export function InterviewProvider({ children }) {
         setReportData(data.report);
     } else {
         const nextQText = data.generated_question?.question || "No question received";
-        setQuestions((prev) => [...prev, nextQText]);
+        setQuestions((prev) => [...prev, { text: nextQText, audioUrl: data.audio_url }]);
     }
+  };
+  
+  // API: stopInterview
+  const stopInterview = async () => {
+    if (!threadId) return;
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const response = await fetch(`${apiUrl}/stop_interview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thread_id: threadId })
+    });
+    const data = await response.json();
+    setReportData(data.report);
+    setIsInterviewComplete(true);
   };
 
   // API: fetchReport
@@ -115,6 +133,7 @@ export function InterviewProvider({ children }) {
     uploadFile,
     startInterview,
     submitAnswer,
+    stopInterview,
     fetchReport,
     resetInterview
   };

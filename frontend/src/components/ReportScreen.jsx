@@ -61,7 +61,7 @@ export default function ReportScreen({ propReport }) {
     );
   }
 
-  const { assessment_summary, topic_analysis, reasoning_profile, key_strengths, priority_improvement_areas, final_summary } = report;
+  const { session_metrics, assessment_summary, topic_analysis, reasoning_profile, key_strengths, priority_improvement_areas, final_summary } = report;
 
   const getUnderstandingColor = (level) => {
     switch(level) {
@@ -86,15 +86,57 @@ export default function ReportScreen({ propReport }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
         {/* Left Column: Summary */}
         <div className="lg:col-span-5 flex flex-col gap-6">
+          {session_metrics && (
+            <div className="bg-surface/5 border border-surface/10 rounded-2xl p-6">
+              <h3 className="font-serif text-xl mb-4 border-b border-surface/10 pb-2">MCQ Summary</h3>
+              
+              <div className="flex flex-col gap-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-surface/80">Total Questions Correct</span>
+                  <p className="text-3xl font-mono">
+                    <span className="text-success font-bold">{session_metrics.total_answered_correctly}</span>
+                    <span className="text-surface/30 mx-2">/</span>
+                    <span className="text-surface/60 text-xl">{session_metrics.total_questions_asked}</span>
+                  </p>
+                </div>
+                
+                {session_metrics.total_topics && (
+                  <div className="flex justify-between items-center border-t border-surface/5 pt-3">
+                    <span className="text-sm text-surface/80">Total Topics Evaluated</span>
+                    <p className="text-xl font-mono text-accent font-medium">
+                      {session_metrics.total_topics}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="bg-surface/5 border border-surface/10 rounded-2xl p-6">
-             <h3 className="font-serif text-xl mb-4 border-b border-surface/10 pb-2">Overall Understanding</h3>
-             <div className="mb-4">
-               <span className={cn("px-4 py-1.5 rounded-full text-sm font-semibold uppercase tracking-wider border", getUnderstandingColor(assessment_summary.overall_understanding))}>
-                 {assessment_summary.overall_understanding.replace('_', ' ')}
-               </span>
-             </div>
-             <p className="text-surface/80 text-sm leading-relaxed">{assessment_summary.summary}</p>
+            <h3 className="font-serif text-xl mb-4 border-b border-surface/10 pb-2">Overall Understanding</h3>
+            <div className="mb-4">
+              <span className={cn("px-4 py-1.5 rounded-full text-sm font-semibold uppercase tracking-wider border", getUnderstandingColor(assessment_summary.overall_understanding))}>
+                {assessment_summary.overall_understanding.replace('_', ' ')}
+              </span>
+            </div>
+            <p className="text-surface/80 text-sm leading-relaxed">{assessment_summary.summary}</p>
           </div>
+
+          {assessment_summary.communication_skills && (
+            <div className="bg-surface/5 border border-surface/10 rounded-2xl p-6">
+              <h3 className="font-serif text-xl mb-4 border-b border-surface/10 pb-2">Communication Skills</h3>
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-accent mb-1">Articulation</h4>
+                  <p className="text-surface/80 text-sm leading-relaxed">{assessment_summary.communication_skills.articulation}</p>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-success mb-1">Confidence</h4>
+                  <p className="text-surface/80 text-sm leading-relaxed">{assessment_summary.communication_skills.confidence}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="bg-surface/5 border border-surface/10 rounded-2xl p-6">
              <h3 className="font-serif text-xl mb-4 border-b border-surface/10 pb-2">Reasoning Profile</h3>
@@ -165,6 +207,16 @@ export default function ReportScreen({ propReport }) {
                   <span className="px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wider border text-surface/60 border-surface/20 bg-surface/10">
                     Consistency: {topic.mcq_interview_consistency.replace(/_/g, ' ')}
                   </span>
+                  {topic.average_time_taken_seconds && (
+                    <span className="px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wider border text-accent/70 border-accent/20 bg-accent/5">
+                      Avg Time: {topic.average_time_taken_seconds}s
+                    </span>
+                  )}
+                  {topic.mcq_questions_asked !== undefined && (
+                    <span className="px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wider border text-success/70 border-success/20 bg-success/5">
+                      MCQ: {topic.mcq_questions_correct} / {topic.mcq_questions_asked} Correct
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-surface/80 mb-6">{topic.feedback}</p>
                 

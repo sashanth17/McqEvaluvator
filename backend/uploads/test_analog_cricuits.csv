@@ -1,0 +1,51 @@
+Question,Option_A,Option_B,Option_C,Option_D,Correct_Answer,User_Answer
+What is the primary purpose of a Zener diode in a circuit?,Voltage amplification,Current amplification,Voltage regulation,Rectification,Voltage amplification,Voltage regulation
+"In a full-wave bridge rectifier, the ripple frequency is how many times the input frequency?",Half,Equal,Twice,Four times,Twice,Twice
+Which diode circuit is used to shift the DC level of an AC signal without changing its shape?,Clipper,Clamper,Rectifier,Voltage Multiplier,Clamper,Clamper
+The depletion region of a PN junction diode contains:,Free electrons,Holes,Immobile ions,Both electrons and holes,Immobile ions,Immobile ions
+Peak Inverse Voltage (PIV) of a center-tapped full-wave rectifier is:,Vm,2Vm,Vm/2,Vm / sqrt(2),2Vm,2Vm
+"In a BJT, the relation between common-base current gain (α) and common-emitter current gain (β) is:",β = α / (1 + α),β = α / (1 - α),α = β / (1 - β),α = 1 + β,β = α / (1 - α),β = α / (1 - α)
+Which BJT configuration provides both voltage and current amplification with a 180-degree phase shift?,Common Base,Common Emitter,Common Collector,Emitter Follower,Common Emitter,Common Emitter
+The Early effect in a BJT refers to:,Base-width modulation,Avalanche breakdown,Thermal runaway,Zener breakdown,Base-width modulation,Base-width modulation
+"For a BJT to operate in the active region, the junctions must be biased as:","EB forward, CB reverse","EB reverse, CB forward","EB forward, CB forward","EB reverse, CB reverse","EB forward, CB reverse","EB forward, CB reverse"
+Thermal runaway in a BJT is primarily caused by an increase in:,Base current,Collector-to-base leakage current (Icbo),Emitter current,Forward voltage,Emitter current,Collector-to-base leakage current (Icbo)
+The common-collector amplifier is also known as:,Voltage Follower,Emitter Follower,Base Follower,Current Follower,Emitter Follower,Emitter Follower
+Which of the following is true for a JFET?,It is a current-controlled device,It is a voltage-controlled device,It has low input impedance,It has positive temperature coefficient of drain current,It is a voltage-controlled device,It is a voltage-controlled device
+The input impedance of a MOSFET is typically in the range of:,Few ohms,Kilohms,Megohms to Gigohms,Zero,Megohms to Gigohms,Megohms to Gigohms
+"In a MOSFET, the threshold voltage (Vth) is the voltage required to:",Cause breakdown,Create a conducting channel,Pinch off the channel,Saturate the drain current,Create a conducting channel,Create a conducting channel
+Which configuration of FET is analogous to the Common Emitter configuration of a BJT?,Common Source,Common Gate,Common Drain,Source Follower,Common Gate,Common Source
+"In the saturation region, the drain current of a MOSFET depends primarily on:",Drain-to-Source voltage (Vds),Gate-to-Source voltage (Vgs),Bulk voltage,Substrate resistance,Gate-to-Source voltage (Vgs),Gate-to-Source voltage (Vgs)
+What is the ideal value of Common Mode Rejection Ratio (CMRR) for an Operational Amplifier?,Zero,Unity,Infinite,100 dB,Infinite,Infinite
+Slew rate of an op-amp is defined as:,Maximum rate of change of input voltage,Maximum rate of change of output voltage,Maximum DC voltage gain,Minimum settling time,Maximum rate of change of output voltage,Maximum rate of change of output voltage
+"In an inverting amplifier using an ideal op-amp, the non-inverting terminal is grounded. The inverting terminal is at:",Supply voltage,Input voltage,Virtual ground,Output voltage,Virtual ground,Virtual ground
+What is the voltage gain of a non-inverting op-amp configuration?,Rf / Rin,- (Rf / Rin),1 + (Rf / Rin),1 - (Rf / Rin),1 + (Rf / Rin),1 + (Rf / Rin)
+An op-amp circuit that produces an output proportional to the time integral of the input is an Integrator. What is its feedback element?,Resistor,Inductor,Capacitor,Diode,Capacitor,Capacitor
+The input stage of an operational amplifier is usually a:,Push-pull amplifier,Differential amplifier,Class B amplifier,Darlington pair,Differential amplifier,Differential amplifier
+A Schmitt trigger uses which type of feedback?,Negative feedback,Positive feedback,No feedback,Current-series feedback,Current-series feedback,Positive feedback
+What is the primary advantage of an Instrumentation Amplifier?,High output impedance,Low CMRR,High CMRR and precise gain,Infinite bandwidth,High CMRR and precise gain,High CMRR and precise gain
+"If the input to an ideal differentiator is a triangular wave, the output will be a:",Sine wave,Square wave,Sawtooth wave,Cosine wave,Cosine wave,Square wave
+The Miller effect primarily increases which of the following equivalent capacitances in a Common Emitter amplifier?,Output capacitance,Input capacitance,Bypass capacitance,Coupling capacitance,Input capacitance,Input capacitance
+"At the lower cut-off frequency, the voltage gain of an amplifier falls to what percentage of its mid-band gain?",50%,70.7%,80%,100%,70.7%,70.7%
+A first-order low-pass active filter has a roll-off rate of:,-10 dB/decade,-20 dB/decade,-40 dB/decade,-60 dB/decade,-20 dB/decade,-20 dB/decade
+Which filter type is characterized by a maximally flat response in the passband?,Chebyshev,Butterworth,Bessel,Elliptic,Butterworth,Butterworth
+The dominant pole of a multi-stage amplifier determines its:,Lower cut-off frequency,Upper cut-off frequency,Mid-band gain,CMRR,Upper cut-off frequency,Upper cut-off frequency
+Negative feedback in an amplifier generally:,Increases gain and bandwidth,Decreases gain and bandwidth,Decreases gain and increases bandwidth,Increases gain and decreases bandwidth,Increases gain and bandwidth,Decreases gain and increases bandwidth
+Voltage-series feedback results in:,"Increased Zin, Decreased Zout","Decreased Zin, Increased Zout","Decreased Zin, Decreased Zout","Increased Zin, Increased Zout","Decreased Zin, Decreased Zout","Increased Zin, Decreased Zout"
+Current-shunt feedback results in:,"Increased Zin, Decreased Zout","Decreased Zin, Increased Zout","Decreased Zin, Decreased Zout","Increased Zin, Increased Zout","Increased Zin, Decreased Zout","Decreased Zin, Increased Zout"
+Which feedback topology is used in a standard non-inverting op-amp amplifier?,Voltage-series,Voltage-shunt,Current-series,Current-shunt,Voltage-series,Voltage-series
+An emitter follower utilizes which type of feedback?,Voltage-series,Voltage-shunt,Current-series,Current-shunt,Current-series,Voltage-series
+"According to the Barkhausen criterion, for sustained oscillations, the loop gain (Aβ) must be:",0,Less than 1,Exactly 1,Infinite,Exactly 1,Exactly 1
+"According to the Barkhausen criterion, the total phase shift around the feedback loop must be:",90 degrees,180 degrees,270 degrees,0 or 360 degrees,0 or 360 degrees,0 or 360 degrees
+Which oscillator is highly stable and uses a piezoelectric crystal?,Hartley Oscillator,Colpitts Oscillator,Wien Bridge Oscillator,Crystal Oscillator,Colpitts Oscillator,Crystal Oscillator
+"In an RC phase-shift oscillator with 3 RC sections, what is the phase shift provided by each RC section?",45 degrees,60 degrees,90 degrees,120 degrees,60 degrees,60 degrees
+A Wien bridge oscillator is typically used for generating frequencies in the range of:,Audio frequencies,Radio frequencies,Microwaves,Ultra-high frequencies,Audio frequencies,Audio frequencies
+The Colpitts oscillator uses a feedback network consisting of:,Two inductors and one capacitor,Two capacitors and one inductor,Resistors and capacitors only,Only inductors,Two capacitors and one inductor,Two capacitors and one inductor
+The Hartley oscillator uses a feedback network consisting of:,Two inductors and one capacitor,Two capacitors and one inductor,Resistors and capacitors only,A transformer,Two inductors and one capacitor,Two inductors and one capacitor
+Which class of power amplifier conducts for exactly 180 degrees of the input signal cycle?,Class A,Class B,Class AB,Class C,Class AB,Class B
+What is the maximum theoretical efficiency of a Class A series-fed power amplifier?,25%,50%,78.5%,100%,25%,25%
+Cross-over distortion is a major problem in which type of amplifier?,Class A,Class B,Class C,Class D,Class B,Class B
+How is cross-over distortion mitigated in power amplifiers?,Using Class A biasing,Using Class AB biasing,Using a heat sink,Increasing the input voltage,Using Class AB biasing,Using Class AB biasing
+Which power amplifier is mostly used in tuned RF (Radio Frequency) applications due to its high efficiency?,Class A,Class B,Class AB,Class C,Class C,Class C
+A Push-Pull amplifier requires:,Two identical NPN transistors,Two identical PNP transistors,One NPN and one PNP transistor (complementary pair),A single high-power transistor,One NPN and one PNP transistor (complementary pair),One NPN and one PNP transistor (complementary pair)
+What is the purpose of a coupling capacitor in a BJT amplifier?,To block AC and pass DC,To block DC and pass AC,To increase voltage gain,To act as a power supply filter,To act as a power supply filter,To block DC and pass AC
+A current mirror circuit is primarily used to:,Amplify voltage,Provide a constant bias current,Act as an oscillator,Filter high frequencies,Amplify voltage,Provide a constant bias current

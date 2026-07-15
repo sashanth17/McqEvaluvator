@@ -90,12 +90,19 @@ export default function LogsScreen() {
                     <p className="text-xs text-surface/50 uppercase tracking-wider mb-1">Model</p>
                     <p className="text-sm text-surface truncate w-32">{log.model}</p>
                   </div>
-                  <div className="text-right bg-background p-2 rounded border border-surface/10">
-                    <p className="text-[10px] text-surface/50 uppercase tracking-wider mb-1">Tokens (Prompt + Comp)</p>
-                    <p className="text-sm font-mono text-success">
-                      {log.usage?.prompt_tokens || 0} + {log.usage?.completion_tokens || 0} = 
-                      <span className="font-bold ml-1">{log.usage?.total_tokens || 0}</span>
-                    </p>
+                  <div className="flex gap-4 text-right bg-background p-2 rounded border border-surface/10">
+                    <div>
+                      <p className="text-[10px] text-surface/50 uppercase tracking-wider mb-1">Input Tokens</p>
+                      <p className="text-sm font-mono text-surface/80">{log.usage?.prompt_tokens || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-surface/50 uppercase tracking-wider mb-1">Output Tokens</p>
+                      <p className="text-sm font-mono text-surface/80">{log.usage?.completion_tokens || 0}</p>
+                    </div>
+                    <div className="border-l border-surface/20 pl-4">
+                      <p className="text-[10px] text-surface/50 uppercase tracking-wider mb-1">Total</p>
+                      <p className="text-sm font-mono font-bold text-success">{log.usage?.total_tokens || 0}</p>
+                    </div>
                   </div>
                   <div className="text-surface/50">
                     {expandedId === idx ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}

@@ -84,6 +84,7 @@ class OpenRouterClient:
                 
                 if thread_id and agent_name:
                     try:
+                        print(f"[{agent_name}] Input Tokens: {usage.get('prompt_tokens', 0)} | Output Tokens: {usage.get('completion_tokens', 0)} | Total: {usage.get('total_tokens', 0)}")
                         get_llm_logs_collection().insert_one({
                             "thread_id": thread_id,
                             "agent": agent_name,
@@ -244,7 +245,7 @@ def extract_topic(question: str) -> str:
     
     for attempt in range(max_retries):
         try:
-            generator = client.generate_streaming_response(
+            generator = client.generate_response(
                 prompt=f"Question:\n{question}",
                 history=[],
                 system_prompt=system_prompt

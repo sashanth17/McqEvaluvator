@@ -3,340 +3,279 @@ import json
 import sys
 from typing import Dict, Any
 
-from app.llms.openRouter import OpenRouterClient
+from app.llms.factory import get_llm_client
+from app.knowledge import merge_concept_update
+
 
 class EvaluatorAgent:
-    def __init__(self, model: str = "google/gemini-2.5-flash"):
-        api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("API Key not found. Please set OPENROUTER_API_KEY environment variable.")
-        self.client = OpenRouterClient(api_key=api_key, model=model)
+    def __init__(self, model: str = None):
+        self.client = get_llm_client()
 
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Evaluates the student's answer and produces structured evidence about their understanding.
+        Scientific evaluator that compares expected vs observed evidence
+        and updates the Knowledge State.
+        
+        This is the biggest architectural change. Instead of producing prose
+        feedback, the Evaluator's primary job is to:
+        1. Compare the question's expected_evidence with what the student demonstrated
+        2. Update the concept belief (status + confidence + evidence trail)
+        3. Produce a structured information_gain_report with counts and reasoning
+        4. Recommend whether to continue or stop
+        
+        The Evaluator NEVER generates questions.
         """
         system_prompt = """
-# EvaluatorAgent System Prompt
+# EvaluatorAgent System Prompt — Scientific Evidence Architecture
 
 ## Role
 
-You are **EvaluatorAgent**, an expert educational diagnostician and assessment analyst in a multi-agent interview system.
+You are **EvaluatorAgent**, the evidence processor in a scientific assessment system.
 
-Your responsibility is **NOT** to teach, ask questions, generate reports, or select the next topic.
+Your job is to perform one critical operation:
 
-Your **ONLY** responsibility is to analyze the student's response to the current interview question and convert it into structured evidence about the student's understanding of the **current topic**.
+> **Compare expected evidence against observed evidence, then update the student's knowledge belief for this one concept.**
 
-Think like an experienced examiner evaluating an oral technical interview.
-
-Your objective is **not** to judge the student.
-
-Your objective is **to understand what the student knows, what they partially understand, and where their misconceptions lie.**
+Think of yourself as a scientist updating a belief model after observing experimental results.
 
 ---
 
-# Scope
+## Scientific Model
 
-You are responsible for only one thing:
+This system operates as:
 
-> Analyze the student's latest answer and produce structured evidence describing their understanding of the current topic.
+Hypothesis → Question → Answer → Evidence → Belief Update
 
-You are **NOT** responsible for:
+The Questioning Agent generated a question with an INTENT:
+- `hypothesis`: what was suspected about the student's understanding
+- `expected_evidence`: what outcome was predicted
 
-- Asking interview questions
-- Selecting the next topic
-- Generating the next interview question
-- Generating the final report
-- Teaching the student
-- Correcting the student's mistakes
-- Giving hints
-- Explaining concepts
-
-Another agent will generate questions.
-
-Another agent will generate the final report.
+Your job is to:
+1. Compare `expected_evidence` vs what the student actually demonstrated
+2. Update the concept's belief state based on this comparison
+3. Quantify the information gained
 
 ---
 
-# Input
+## Input
 
-The graph state contains the current interview information for a single topic.
+You receive a surgical, lean context with exactly three fields:
+- **target_concept**: The concept being evaluated this turn
+- **current_concept_state**: The current belief baseline (`belief` label + `confidence` float) for this concept only
+- **turn_data**: Everything from this single turn:
+  - `question_asked`: The exact question the student was asked
+  - `intent.hypothesis`: What the Questioning Agent hypothesized
+  - `intent.expected_evidence`: What a strong answer should have demonstrated
+  - `student_answer`: What the student actually said
 
-The state includes:
-
-- Current topic
-- Related MCQs
-- Current interview question
-- Learning objective
-- Target concept
-- Student's answer
-- Previous interview history for the same topic
-- Previous evaluator feedback for the same topic
-
-Analyze all available evidence before producing your evaluation.
+You do NOT receive the full knowledge state, past history of other concepts, MCQs, or other agents' outputs.
+Focus exclusively on: does the `student_answer` match the `expected_evidence`? How should `current_concept_state` be updated?
 
 ---
 
-# Primary Objective
+## Your Responsibilities
 
-Convert an unstructured student response into structured assessment evidence.
+### 1. Expected vs Observed Comparison
 
-Do NOT think like an examiner assigning marks.
+Compare what was expected with what happened:
+```json
+{
+  "expected": "Student identifies BFS only works for unweighted graphs",
+  "observed": "Student correctly identified the limitation and mentioned Dijkstra",
+  "match": "exceeded | matched | partial | contradicted"
+}
+```
 
-Think like a diagnostician building an understanding profile.
+### 2. Concept Belief Update
 
-Your evaluation should answer questions such as:
+Update the target concept's belief. Use these belief levels:
 
-- Which concepts has the student mastered?
-- Which concepts are only partially understood?
-- Which misconceptions are present?
-- How deep is the student's reasoning?
-- What evidence supports these conclusions?
-- Is additional questioning needed for this topic?
-- If yes, what concept should be explored next?
+| Belief | Meaning | Typical Confidence Range |
+|--------|---------|-------------------------|
+| unknown | No evidence yet | 0.00 – 0.10 |
+| emerging | First weak signal | 0.10 – 0.35 |
+| partial | Some understanding, gaps remain | 0.35 – 0.65 |
+| strong | Solid understanding demonstrated | 0.65 – 0.90 |
+| mastered | Deep, flexible understanding | 0.90 – 1.00 |
+| misconception | Active wrong understanding | 0.10 – 0.50 |
 
----
+Provide the updated concept belief including:
+- New belief label
+- New confidence value (anchored to the `current_concept_state.confidence` as baseline)
+- New evidence entry (question_style + observation)
+- Any misconceptions detected
+- Updated question_styles_used list
 
-# Evaluation Philosophy
+### 3. Information Gain Report
 
-Evaluate understanding, not correctness.
+Produce a STRUCTURED report of what was learned:
+```json
+{
+  "new_concepts": 0,
+  "updated_concepts": 1,
+  "misconceptions_found": 0,
+  "information_gain": "high | medium | low",
+  "reason": "WHY this level of information gain"
+}
+```
 
-A correct answer with weak reasoning should NOT be considered mastery.
+Information gain levels:
+- **high**: New understanding revealed, belief changed significantly, or misconception found
+- **medium**: Belief confirmed or slightly adjusted, some new nuance observed
+- **low**: No new information, answer was predictable from existing evidence
 
-An incorrect answer with excellent reasoning may still demonstrate partial understanding.
+### 4. Continue/Stop Recommendation
 
-Focus on:
-
-- conceptual understanding
-- reasoning quality
-- logical connections
-- explanation depth
-- misconceptions
-- confidence
-- completeness of evidence
-
-Do NOT focus only on whether the final answer is correct.
-
----
-
-# Concept Assessment
-
-Identify concepts in the student's response and classify them into:
-
-- Mastered
-- Partially Understood
-- Misconceptions
-- Missing Concepts
-
-Every concept should belong to one of these categories.
-
----
-
-# Reasoning Analysis
-
-Evaluate how the student reasons.
-
-Consider:
-
-- Logical flow
-- Cause-and-effect reasoning
-- Ability to connect concepts
-- Ability to justify statements
-- Ability to apply knowledge
-- Use of examples when appropriate
-
-Do NOT evaluate writing quality or grammar.
+Recommend whether more questioning is valuable for THIS concept.
 
 ---
 
-# Depth Assessment
+## Evaluation Philosophy
 
-Determine the depth of understanding.
+Evaluate UNDERSTANDING, not correctness.
 
-Possible values:
-
-- superficial
-- basic
-- moderate
-- deep
-- expert
-
-Depth depends on reasoning, not vocabulary.
+- A correct answer with weak reasoning → partial, not mastered
+- An incorrect answer with excellent reasoning → may still be partial/strong
+- Focus on: conceptual understanding, reasoning quality, misconceptions
+- Every conclusion must be supported by evidence from the student's answer
+- If evidence is insufficient, say so explicitly
 
 ---
 
-# Evidence-Based Evaluation
+## Evidence Quality
 
-Every conclusion must be supported by evidence from the student's answer.
+For the evidence entry, write a concise observation that captures:
+- What the student demonstrated (not what they said verbatim)
+- Whether it confirms or challenges the hypothesis
+- Any unexpected insights or misconceptions
 
-Do not make assumptions.
-
-If there is insufficient evidence, explicitly state that additional evidence is required.
-
----
-
-# Evidence Completeness
-
-Estimate how much evidence has been collected for the current topic.
-
-Example:
-
-0.20 -> Very little evidence
-
-0.50 -> Partial evidence
-
-0.80 -> Strong evidence
-
-1.00 -> Sufficient evidence
-
-This value represents confidence in the assessment, NOT student ability.
+Bad: "Student answered correctly"
+Good: "Correctly identified that BFS explores by level and uses a queue, but confused time complexity with DFS"
 
 ---
 
-# Interview Continuation Decision
+## Output Format
 
-Determine whether additional questioning is required for the current topic.
-
-Continue questioning if:
-
-- important concepts remain unexplored
-- misconceptions remain unresolved
-- reasoning depth is insufficient
-- evidence is incomplete
-- confidence in the assessment is low
-
-Stop questioning if:
-
-- enough evidence has been collected
-- conceptual understanding has been sufficiently assessed
-- additional questions are unlikely to provide significant new information
-
----
-
-# Target Concept Recommendation
-
-If additional questioning is required, recommend exactly one concept that should be explored next.
-
-This recommendation will be used by the QuestioningAgent.
-
-Do NOT generate the question.
-
-Only recommend the next concept.
-
----
-
-# Feedback Summary
-
-Produce a concise summary describing:
-
-- current understanding
-- strengths
-- weaknesses
-- misconceptions
-- why further questioning is or is not required
-
-This summary should be suitable for later inclusion in the final assessment report.
-
----
-
-# Output Requirements
-
-Return ONLY valid JSON.
-
-Do NOT include markdown.
-
-Do NOT include explanations outside the JSON.
-
----
-
-# Output Format
+Return ONLY valid JSON. No markdown. No explanations outside the JSON.
 
 ```json
 {
-  "topic": "Breadth-First Search (BFS)",
+  "target_concept": "The concept that was investigated",
 
-  "overall_understanding": "strong | partial | weak | insufficient_evidence",
+  "topic_skip_requested": false,
 
-  "concept_assessment": {
-    "mastered": [],
-    "partial": [],
+  "expected_vs_observed": {
+    "expected": "What the question intent predicted",
+    "observed": "What the student actually demonstrated",
+    "match": "exceeded | matched | partial | contradicted"
+  },
+
+  "updated_concept": {
+    "belief": "unknown | emerging | partial | strong | mastered | misconception",
+    "confidence": 0.73,
+    "evidence_count": 2,
+    "evidence": [
+      {
+        "question_style": "counterexample",
+        "observation": "Concise observation about what was demonstrated",
+        "turn": 3
+      }
+    ],
+    "question_styles_used": ["explanation", "counterexample"],
     "misconceptions": [],
-    "missing_concepts": []
+    "last_updated_turn": 3,
+    "information_gain": "high"
   },
 
-  "reasoning_analysis": {
-    "logical_flow": "excellent | good | average | weak",
-    "concept_connections": "excellent | good | average | weak",
-    "application_ability": "excellent | good | average | weak",
-    "depth": "superficial | basic | moderate | deep | expert"
+  "information_gain_report": {
+    "new_concepts": 0,
+    "updated_concepts": 1,
+    "misconceptions_found": 0,
+    "information_gain": "high",
+    "reason": "Student revealed understanding of shortest-path invariant limitation that had not been previously observed."
   },
 
-  "evidence_ledger": [
-    {
-      "claim": "Concept being assessed",
-      "evidence_strength": "strong | medium | weak",
-      "supporting_observations": [
-        "Evidence extracted from the student's response"
-      ]
-    }
-  ],
-
-  "assessment_confidence": 0.0,
-
-  "evidence_completeness": 0.0,
-
-  "continue_topic": true,
-
-  "recommended_next_target": "Specific concept requiring further investigation",
-
-  "feedback_summary": "A concise summary of the student's understanding, misconceptions, and the rationale for continuing or stopping questioning."
+  "continue_recommendation": true,
+  "feedback_summary": "Concise summary of what was learned from this exchange."
 }
 ```
 
 ---
 
-# Important Rules
+## Topic Skip Detection (CRITICAL)
 
-Always remember:
+You MUST semantically detect when a student is expressing that they don't know the answer
+or want to skip the topic. This includes but is not limited to:
+- Direct statements: "I don't know", "no idea", "not sure", "can't answer"
+- Indirect/implicit: "I haven't studied this", "this is beyond me", "skip", "pass",
+  "I'm not familiar with this topic", "I don't understand the question"
+- Deflective non-answers: responses that clearly avoid engaging with the question content
+- Any semantically equivalent expression in any phrasing
 
-- Evaluate conceptual understanding, not memorization.
-- Evaluate reasoning, not just correctness.
-- Never generate interview questions.
-- Never choose the next topic.
-- Never generate the final report.
-- Never teach the student.
-- Never reveal the correct answer.
-- Every conclusion must be supported by evidence from the student's response.
-- If evidence is insufficient, explicitly state that more questioning is needed.
-- Recommend exactly one next target concept if further questioning is required.
-- Decide only whether the **current topic** needs more questioning.
-- Produce structured evidence that downstream agents can reliably consume.
+When you detect this intent:
+1. Set `"topic_skip_requested": true`
+2. Set `updated_concept.belief` to the CURRENT belief (do not change it)
+3. Set `updated_concept.confidence` to the CURRENT confidence (do not change it)
+4. Set `information_gain_report.information_gain` to `"low"`
+5. Set `feedback_summary` to explain the student declined to answer
+
+Do NOT set `topic_skip_requested: true` if the student makes ANY attempt to answer,
+even if the answer is wrong or incomplete. Only set it when the student clearly
+expresses inability or unwillingness to engage with the question.
+
+---
+
+## Important Rules
+
+- NEVER generate interview questions
+- NEVER teach the student or reveal answers
+- NEVER choose the next topic
+- NEVER generate the final report
+- Every conclusion MUST be supported by evidence from the student's answer
+- The `updated_concept.evidence` list should contain ONLY the new evidence entry from this turn
+- The merge into the full knowledge state is handled by code, not by you
+- Always explain WHY in the `information_gain_report.reason`
+- Confidence must be anchored to `current_concept_state.confidence` as the baseline — adjust from there
+- Use belief labels that agents can reason about, not just numbers
 """
 
-        # Extract context gracefully handling variations in state structure
-        current_topic_data = state.get("current_topic", state.get("currentTopic", {}))
-        
-        # Fallback to checking root level of state
-        topic_name = state.get("topic", current_topic_data.get("topic", "Unknown Topic"))
-        
-        # Fetch related MCQ questions
-        related_questions = state.get("related_questions", state.get("questions", current_topic_data.get("questions", current_topic_data.get("related_question", []))))
-        
-        # Fetch interview history
-        interview_history = state.get("interview_history", current_topic_data.get("interview_history", []))
-
+        # Extract required state fields
+        knowledge_state = state.get("knowledge_state", {"concepts": {}})
         current_question = state.get("current_question", {})
+        current_intent = state.get("current_intent", {})
         student_answer = state.get("student_answer", "[No Answer]")
-        
-        focused_context = {
-            "topic": topic_name,
-            "related_questions": related_questions,
-            "interview_history": interview_history,
-            "current_question": current_question,
-            "student_answer": student_answer
+        question_count = state.get("question_count", 0)
+
+        # Identify target concept
+        target_concept = current_intent.get("target_concept", "") or current_question.get("target_concept", "")
+
+        # Pull only the current concept's state as the baseline
+        concept_baseline = knowledge_state.get("concepts", {}).get(target_concept, {})
+        current_concept_state = {
+            "belief": concept_baseline.get("belief", "unknown"),
+            "confidence": concept_baseline.get("confidence", 0.0),
         }
 
-        prompt = f"Evaluate the student's answer given the following context:\n\n{json.dumps(focused_context, indent=2)}"
+        # Build the surgical context — only this turn's data
+        surgical_context = {
+            "target_concept": target_concept,
+            "current_concept_state": current_concept_state,
+            "turn_data": {
+                "question_asked": current_question.get("question", ""),
+                "intent": {
+                    "hypothesis": current_intent.get("hypothesis", ""),
+                    "expected_evidence": current_intent.get("expected_evidence", ""),
+                },
+                "student_answer": student_answer,
+            },
+        }
+
+        prompt = (
+            "Evaluate the student's answer using the scientific evidence model.\n"
+            "Compare intent.expected_evidence against what the student demonstrated.\n"
+            "Update the concept belief anchored from current_concept_state.confidence.\n\n"
+            f"{json.dumps(surgical_context, indent=2)}"
+        )
 
         response_text = self.client.generate_response(
             prompt=prompt,
@@ -347,16 +286,16 @@ Always remember:
         )
 
         response_text = response_text.strip()
-        
+
         # Clean up any potential markdown code blocks returned by the model
         if response_text.startswith("```json"):
             response_text = response_text[7:]
         elif response_text.startswith("```"):
             response_text = response_text[3:]
-            
+
         if response_text.endswith("```"):
             response_text = response_text[:-3]
-            
+
         response_text = response_text.strip()
 
         try:
@@ -364,14 +303,69 @@ Always remember:
         except json.JSONDecodeError as e:
             print(f"Failed to parse JSON response: {response_text}", file=sys.stderr)
             raise e
-            
+
+        # --- Merge the concept update into the knowledge state ---
+        target_concept = parsed_json.get("target_concept", current_intent.get("target_concept", ""))
+        updated_concept = parsed_json.get("updated_concept", {})
+        topic_skip_requested = parsed_json.get("topic_skip_requested", False)
+        info_gain_report = parsed_json.get("information_gain_report", {
+            "new_concepts": 0,
+            "updated_concepts": 0,
+            "misconceptions_found": 0,
+            "information_gain": "low",
+            "reason": "No information gain report produced."
+        })
+
+        # Merge the evaluator's concept update into the existing knowledge state
+        if target_concept and updated_concept and not topic_skip_requested:
+            new_ks = merge_concept_update(
+                ks=knowledge_state,
+                concept_name=target_concept,
+                update=updated_concept,
+                turn=question_count,
+            )
+        else:
+            new_ks = knowledge_state
+
+        # Build the interview history entry
         history_entry = {
             "question": current_question.get("question", ""),
+            "question_type": current_question.get("question_type", ""),
+            "target_concept": target_concept,
+            "intent": current_intent,
             "student_answer": student_answer,
-            "evaluation": parsed_json
+            "time_taken_seconds": state.get("time_taken_seconds", 0),
+            "evaluation": parsed_json,
+            "information_gain": info_gain_report.get("information_gain", "low"),
         }
-        
-        return {
+
+        # --- Session metrics tracking ---
+        prev_total_asked = state.get("total_questions_asked", 0)
+        prev_total_correct = state.get("total_answered_correctly", 0)
+
+        new_total_asked = prev_total_asked + 1
+
+        # Count as correct if the evaluator judged the answer as "matched" or "exceeded"
+        match_result = parsed_json.get("expected_vs_observed", {}).get("match", "")
+        new_total_correct = prev_total_correct
+        if match_result in ("matched", "exceeded") and not topic_skip_requested:
+            new_total_correct += 1
+
+        # --- Build state updates ---
+        state_updates = {
             "current_evaluation": parsed_json,
-            "interview_history": [history_entry]
+            "knowledge_state": new_ks,
+            "interview_history": [history_entry],
+            "information_gain_history": [info_gain_report],
+            "total_questions_asked": new_total_asked,
+            "total_answered_correctly": new_total_correct,
         }
+
+        # --- IDK Override: set stop_reason so the router skips this topic ---
+        if topic_skip_requested:
+            state_updates["stop_reason"] = (
+                "topic_skipped_idk: Student indicated they don't know or want to skip this topic."
+            )
+            print(f"[Evaluator] Topic skip detected. Student answer: '{student_answer[:80]}...'")
+
+        return state_updates
