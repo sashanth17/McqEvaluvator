@@ -70,7 +70,7 @@ def parse_json_response(text: str, model_name: str = "Unknown", batch_no: int = 
             raise ValueError(f"Failed to decode response as JSON (malformed JSON structure): {e}. Raw response: {text}")
 
 
-def validate_llm_response(data: Any) -> None:
+def validate_llm_response(data: Any, require_topic: bool = True) -> None:
     """
     Validates that the response dict conforms to the expected schema
     with question_index, topic, and concepts.
@@ -87,7 +87,7 @@ def validate_llm_response(data: Any) -> None:
             raise ValueError(f"Validation Error: Topic item at index {idx} must be a dictionary, got {type(item).__name__}")
         if "question_index" not in item:
             raise ValueError(f"Validation Error: Topic item at index {idx} is missing the 'question_index' key.")
-        if "topic" not in item:
+        if require_topic and "topic" not in item:
             raise ValueError(f"Validation Error: Topic item at index {idx} is missing the 'topic' key.")
 
         # Verify that question_index is/can be an integer
@@ -241,10 +241,126 @@ Concept Consolidation Rules (IMPORTANT):
     return {"topics": []}
 
 
-def process_csv(csv_path: str, thread_id: str = None) -> dict:
+def extract_concepts_only_batch(questions: List[Dict[str, Any]], batch_no: int = 1, thread_id: str = None) -> Dict[str, Any]:
     """
-    Reads the CSV, extracts question topics AND concepts in a single LLM call,
-    compares user and correct answers, and groups the statistics.
+    Extract key concepts tested by questions that already have an assigned topic.
+
+    Returns:
+        {
+          "topics": [
+            {
+              "question_index": 0,
+              "concepts": ["Shortest Path Property", "BFS Queue Usage"]
+            }
+          ]
+        }
+    """
+    if not questions:
+        return {"topics": []}
+
+    client = get_llm_client()
+    model_name = getattr(client, "model", "unknown")
+
+    system_prompt = (
+    '''
+    You are an expert, domain-agnostic concept extractor.
+Return ONLY valid JSON.
+Do not return markdown.
+Do not return code fences.
+Do not return explanations.
+Do not return plain text.
+Your output must be valid JSON and parsable by json.loads().
+
+Task:
+For each question, given its question text and assigned learning topic, extract the specific CONCEPTS being tested.
+
+Concept Extraction Rules:
+1. Extract EXACTLY 1-2 core concepts that the question tests. Do not extract more than 2.
+2. Concepts should be specific, granular, and testable (e.g., 'Bubble Sort Mechanism', not 'Algorithms').
+3. Each concept should represent a distinct piece of knowledge required to answer correctly.
+4. Include the primary concept being tested and any supporting concepts.
+5. Concepts must inherently fall under the assigned topic.
+6. Use clear, concise labels (2-5 words each).
+
+CRITICAL SCOPE RULE:
+You must ONLY extract concepts that are DIRECTLY tested by the given questions.
+Do NOT infer, hallucinate, or add external concepts that are not explicitly present in the question text.
+Every concept you list must be traceable to specific content in the question.
+
+Concept Consolidation Rules (IMPORTANT):
+1. Group similar or closely related concepts under a single consolidated parent concept name.
+2. Each question should produce 1-2 consolidated concept names.
+
+Output Format:
+{
+  "topics": [
+    {
+      "question_index": 0,
+      "concepts": ["BFS Traversal Order", "Shortest Path Property"]
+    }
+  ]
+}
+
+Strict Output Rules:
+* Return ONLY valid JSON.
+* Do NOT return markdown.
+* Do NOT return explanations.
+* Do NOT return code blocks.
+* Do NOT return question text or options.
+* Do NOT return answers.
+* Do NOT return confidence scores.
+* Do NOT return any text before or after the JSON.
+    '''
+    )
+
+    payload = [
+        {
+            "question_index": idx,
+            "topic": item.get("topic", "General"),
+            "question": item["question"]
+        }
+        for idx, item in enumerate(questions)
+    ]
+
+    prompt = (
+        "Extract the specific concepts tested by each of the following questions, "
+        "given their assigned topic. Return ONLY valid JSON matching the schema.\n\n"
+        f"Questions:\n{json.dumps(payload, ensure_ascii=False, indent=2)}"
+    )
+
+    max_retries = 5
+    base_delay = 2.0
+
+    for attempt in range(max_retries):
+        try:
+            response_text = client.generate_response(
+                prompt=prompt,
+                history=[],
+                system_prompt=system_prompt,
+                max_tokens=4096,
+                thread_id=thread_id,
+                agent_name="IngesterAgent"
+            )
+
+            parsed_response = parse_json_response(response_text, model_name=model_name, batch_no=batch_no)
+            validate_llm_response(parsed_response, require_topic=False)
+            return parsed_response
+
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"OpenRouter batch API call failed after {max_retries} attempts: {e}", file=sys.stderr)
+                raise
+            delay = base_delay * (2 ** attempt)
+            print(f"OpenRouter batch API call failed: {e}. Retrying in {delay:.1f}s...", file=sys.stderr)
+            time.sleep(delay)
+
+    return {"topics": []}
+
+
+def process_csv(csv_path: str, classification_option: int = 1, thread_id: str = None) -> dict:
+    """
+    Reads the CSV, extracts question topics AND concepts (Option 1) or relies on CSV topics
+    and extracts concepts (Option 2), compares user and correct answers, and groups statistics.
 
     Output format:
         {
@@ -259,6 +375,11 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
           ]
         }
     """
+    try:
+        classification_option = int(classification_option)
+    except (ValueError, TypeError):
+        classification_option = 1
+
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"Input CSV file not found at: {csv_path}")
 
@@ -270,18 +391,33 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
 
     # Validate required columns case-insensitively
     required_cols = ['Question', 'Correct_Answer', 'User_Answer']
+    if classification_option == 2:
+        required_cols.append('Topic')
+
     col_map = {}
     for req in required_cols:
         matched = None
         for col in df.columns:
-            if col.strip().lower() == req.lower():
+            col_cleaned = col.strip().lower()
+            req_cleaned = req.lower()
+            if (
+                col_cleaned == req_cleaned or
+                col_cleaned.replace('_', ' ') == req_cleaned.replace('_', ' ') or
+                col_cleaned.replace('_', '') == req_cleaned.replace('_', '')
+            ):
                 matched = col
                 break
         if matched is None:
-            raise KeyError(
-                f"Missing required column: '{req}' (case-insensitive). "
-                f"Available columns: {list(df.columns)}"
-            )
+            if req == 'Topic':
+                raise KeyError(
+                    f"Missing required column: 'Topic' (required when Option 2 is selected). "
+                    f"Available columns: {list(df.columns)}"
+                )
+            else:
+                raise KeyError(
+                    f"Missing required column: '{req}' (case-insensitive). "
+                    f"Available columns: {list(df.columns)}"
+                )
         col_map[req] = matched
 
     # Map option columns if they exist, case-insensitively
@@ -308,6 +444,7 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
     questions = [clean_str(x) for x in df[col_map['Question']].tolist()]
     correct_answers = [clean_str(x) for x in df[col_map['Correct_Answer']].tolist()]
     user_answers = [clean_str(x) for x in df[col_map['User_Answer']].tolist()]
+    topics_from_csv = [clean_str(x) for x in df[col_map['Topic']].tolist()] if classification_option == 2 and 'Topic' in col_map else []
 
     opt_a_vals = [clean_str(x) for x in df[opt_map['op1']].tolist()] if opt_map['op1'] is not None else [""] * len(df)
     opt_b_vals = [clean_str(x) for x in df[opt_map['op2']].tolist()] if opt_map['op2'] is not None else [""] * len(df)
@@ -318,8 +455,10 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
     original_questions = {}
     for idx in range(len(df)):
         q_num = idx + 1
+        given_topic = topics_from_csv[idx] if (classification_option == 2 and idx < len(topics_from_csv) and topics_from_csv[idx]) else "Unclassified"
         original_questions[q_num] = {
             "question": questions[idx],
+            "topic": given_topic,
             "op1": opt_a_vals[idx],
             "op2": opt_b_vals[idx],
             "op3": opt_c_vals[idx],
@@ -347,10 +486,14 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
     batches = []
     current_batch = []
     for q_num, info in original_questions.items():
-        current_batch.append({
+        batch_item = {
             "question_no": q_num,
             "question": info["question"]
-        })
+        }
+        if classification_option == 2:
+            batch_item["topic"] = info["topic"]
+        current_batch.append(batch_item)
+
         if len(current_batch) == batch_size:
             batches.append(current_batch)
             current_batch = []
@@ -362,13 +505,16 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
 
     def process_batch(batch, batch_no):
         try:
-            result = classify_topics_batch(batch, batch_no, thread_id=thread_id)
+            if classification_option == 2:
+                result = extract_concepts_only_batch(batch, batch_no, thread_id=thread_id)
+            else:
+                result = classify_topics_batch(batch, batch_no, thread_id=thread_id)
             return batch, batch_no, result
         except Exception as e:
             print(f"Error processing batch {batch_no} starting with Q{batch[0]['question_no']}: {e}", file=sys.stderr)
             return batch, batch_no, {"topics": []}
 
-    print(f"Processing {len(df)} questions in {len(batches)} batches using {max_workers} thread workers...")
+    print(f"Processing {len(df)} questions (Option {classification_option}) in {len(batches)} batches using {max_workers} thread workers...")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_batch = {
@@ -382,7 +528,6 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
                 batch_question_nos = [item["question_no"] for item in batch]
 
                 for topic_info in batch_response.get("topics", []):
-                    topic_name = topic_info.get("topic", "Unclassified")
                     concepts = topic_info.get("concepts", [])
                     q_idx = topic_info.get("question_index")
                     try:
@@ -392,13 +537,16 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
                     # Ensure question_index is valid for the current batch
                     if 0 <= q_idx_int < len(batch):
                         q_no = batch[q_idx_int]["question_no"]
-                        assigned_topics[q_no] = topic_name
+                        if classification_option == 2:
+                            assigned_topics[q_no] = original_questions[q_no]["topic"]
+                        else:
+                            assigned_topics[q_no] = topic_info.get("topic", "Unclassified")
                         assigned_concepts[q_no] = concepts
 
                 # Fallback any unclassified question numbers in this batch
                 for q_no in batch_question_nos:
                     if q_no not in assigned_topics:
-                        assigned_topics[q_no] = "Unclassified"
+                        assigned_topics[q_no] = original_questions[q_no]["topic"] if classification_option == 2 else "Unclassified"
                     if q_no not in assigned_concepts:
                         assigned_concepts[q_no] = []
             except Exception as e:
@@ -406,7 +554,7 @@ def process_csv(csv_path: str, thread_id: str = None) -> dict:
                 for item in batch:
                     q_no = item["question_no"]
                     if q_no not in assigned_topics:
-                        assigned_topics[q_no] = "Unclassified"
+                        assigned_topics[q_no] = original_questions[q_no]["topic"] if classification_option == 2 else "Unclassified"
                     if q_no not in assigned_concepts:
                         assigned_concepts[q_no] = []
 

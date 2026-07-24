@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -65,7 +65,10 @@ def read_root():
     return {"message": "Welcome to FastAPI Backend"}
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    classification_option: int = Form(1)
+):
     if not file:
         raise HTTPException(status_code=400, detail="No file uploaded")
     
@@ -74,16 +77,17 @@ async def upload_file(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
             
-        # Process CSV using IngestorAgent (now extracts topics + concepts in single LLM call)
+        # Process CSV using IngestorAgent
         import asyncio
         import uuid
         thread_id = f"ingest_{uuid.uuid4().hex[:8]}"
-        extracted_data = await asyncio.to_thread(process_csv, file_path, thread_id)
+        extracted_data = await asyncio.to_thread(process_csv, file_path, classification_option, thread_id)
         
         # Save to MongoDB
         topics = extracted_data.get("topics", [])
         insert_result = contexts_collection.insert_one({
             "filename": file.filename,
+            "classification_option": classification_option,
             "topics": topics
         })
         doc_id = str(insert_result.inserted_id)
@@ -97,7 +101,8 @@ async def upload_file(file: UploadFile = File(...)):
         "message": "File uploaded and processed successfully", 
         "filename": file.filename, 
         "url": f"/uploads/{file.filename}",
-        "context_id": doc_id
+        "context_id": doc_id,
+        "classification_option": classification_option
     }
 
 

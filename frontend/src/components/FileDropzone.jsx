@@ -3,7 +3,7 @@ import { UploadCloud, CheckCircle2, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useInterview } from '../context/InterviewContext';
 
-export default function FileDropzone({ onUploadSuccess, onError }) {
+export default function FileDropzone({ classificationOption = 1, onUploadSuccess, onError }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -32,7 +32,7 @@ export default function FileDropzone({ onUploadSuccess, onError }) {
     }, 150);
 
     try {
-      await uploadFile(file);
+      await uploadFile(file, classificationOption);
       setProgress(100);
       setTimeout(() => {
         setIsUploading(false);

@@ -16,13 +16,14 @@ export function InterviewProvider({ children }) {
   const [reportData, setReportData] = useState(null);
 
   // API: uploadFile
-  const uploadFile = async (file) => {
+  const uploadFile = async (file, classificationOption = 1) => {
     if (file.size > 10 * 1024 * 1024) {
       throw new Error("File too large. Max 10MB allowed.");
     }
     
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("classification_option", classificationOption);
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     
@@ -42,7 +43,8 @@ export function InterviewProvider({ children }) {
       name: file.name,
       size: file.size,
       url: data.url,
-      context_id: data.context_id
+      context_id: data.context_id,
+      classification_option: data.classification_option
     });
   };
 
